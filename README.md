@@ -10,11 +10,11 @@
 В директории `bucket` находим файл `var.tfvars` и вписываем данные от `YC`.  
 
 Далее иницилизируем `terraform`.
-```yaml
+```bash
 terraform init
 ```
 После инициализации `terraform` следует выполнить:
-```yaml
+```bash
 terraform apply -auto-approve -var-file=var.tfvars
 ```
 > [!IMPORTANT]  
@@ -32,15 +32,15 @@ terraform apply -auto-approve -var-file=var.tfvars
 > AWS_ACCESS_KEY_ID - публичный ключ от сервисного аккаунта
 > AWS_SECRET_ACCESS_KEY - закрытый ключ
 > AWS_DEFAULT_REGION - регион
-```yaml
+```bash
 export AWS_ACCESS_KEY_ID=""
 export AWS_SECRET_ACCESS_KEY=" "
 export AWS_DEFAULT_REGION="ru-central1"
 ```
-Это нужно для того, чтобы стейт записывался через сервисный аккаунт у бакет.  
-Далее выполняем комманды по инициализации и создаю ресурсов.
+Это нужно для того, чтобы стейт записывался через сервисный аккаунт в бакет.  
+Далее выполняем команды по инициализации и созданию ресурсов.
 
-```yaml
+```bash
 terraform init
 terraform apply -auto-approve -var-file=var.tfvars
 ```
@@ -54,7 +54,7 @@ terraform apply -auto-approve -var-file=var.tfvars
 
 1) Добавляем IP-адресс виртуальной машины в `inventory-файл` для ansible по пути `/etc/ansible/hosts`
 2) Выполняем плейбук `/ansible/ansible-playbook.yaml`
-```yaml
+```bash
 ansible-playbook ansible-playbook.yaml
 ```
 Данный плейбук скопирует на ВМ плейбук для настройки нод, а именно `kubeadm-playbook.yaml` в рамках которого происходит подготовка ВМ к хосту кластера.
@@ -67,8 +67,8 @@ ansible-playbook ansible-playbook.yaml
 ## Невысокодоступный кластер
 
 Так как кластер невысокодоступный, то следует в группе `control-plane` иметь одну ВМ.  
-1. Выполнить инициализацию кластера на `worker ноде`.
-```yaml
+1. Выполнить инициализацию кластера на `master ноде`.
+```bash
 sudo kubeadm init \
   --cri-socket=unix:///var/run/containerd/containerd.sock \
   --pod-network-cidr=192.168.0.0/16
@@ -76,19 +76,19 @@ sudo kubeadm init \
 Инициализируем кластер, в качестве рантайма используем `containerd`.
 
 2. Настройка `kubectl`
-```yaml
+```bash
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
 3. Устанавливаем сетевой плагин `Flannel`
-```yaml
+```bash
 wget https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 sed -i 's/10.244.0.0\/16/192.168.0.0\/16/g' kube-flannel.yml
 kubectl apply -f kube-flannel.yml
 ```
 4. Присоединям `worker ноды` к кластеру через kubeadm join.
 
-## Высокодоступный кластер.
+## Высокодоступный кластер
 TBC...
