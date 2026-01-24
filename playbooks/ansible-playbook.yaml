@@ -1,0 +1,77 @@
+- name: Install Ansible on Host
+  hosts: vms
+  become: yes
+
+  tasks:
+    - name: Copy private key from control node
+      copy:
+        src: ~/.ssh/id_rsa     
+        dest: /home/$(whoami)/.ssh/id_rsa     
+        owner: user
+        group: user
+        mode: '0600'
+
+    - name: Copy private key from control node
+      copy:
+        src: ~/.ssh/id_rsa.pub
+        dest: /home/$(whoami)/.ssh/id_rsa.pub
+        owner: user
+        group: user
+        mode: '0600'
+    
+    - name: Create ansible directory
+      ansible.builtin.file:
+        path: ansible-k8s
+        state: directory
+        mode: '0755'
+
+    - name: Make hosts file
+      ansible.builtin.copy:
+        content: |
+          [control-plane]
+          [worker-plane]
+        dest: ansible-k8s/hosts
+
+    - name: Create ansible.cfg
+      ansible.builtin.copy:
+        content: |
+          [defaults]
+          inventory = hosts
+        dest: ansible-k8s/ansible.cfg
+
+    - name: Copy playbook to jump-on
+      copy:
+        src: ~/vms/playbooks/kubeadm-playbook.yaml
+        dest: /home/$(whoami)/ansible-k8s/kubeadm-playbook.yaml
+        owner: user
+        group: user
+        mode: '0644'
+
+    - name: Run apt update
+      ansible.builtin.apt:
+        update_cache: yes
+    
+    - name: Install ansible
+      ansible.builtin.apt:
+        name: ansible
+        update_cache: yes
+    
+    # -------- kubectl --------
+    - name: Install additions
+      ansible.builtin.apt:
+        name: curl
+        update_cache: yes
+    
+    - name: Install last version kubectl
+      ansible.builtin.shell: |
+        curl -LO https://dl.k8s.io/release/`curl -LS https://dl.k8s.io/release/stable.txt`/bin/linux/amd64/kubectl
+      
+    - name: Change rights on binary
+      ansible.builtin.file:
+        path: ./kubectl
+        mode: '0755'
+    
+    - name: Move kubectl to /usr/local/bin
+      ansible.builtin.shell: |
+        mv ./kubectl /usr/local/bin/kubectl
+        chmod +x /usr/local/bin/kubectl
