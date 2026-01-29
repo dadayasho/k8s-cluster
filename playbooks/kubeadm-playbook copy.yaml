@@ -3,6 +3,28 @@
   become: yes
 
   tasks:
+    # ----- Disable upgrades during set up -----
+    - name: Stop unattended-upgrades service
+      systemd:
+        name: unattended-upgrades
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+    
+    - name: Kill unattended-upgrades processes
+      shell: pkill -f unattended-upgr || true
+      ignore_errors: yes
+    
+    - name: Remove dpkg locks
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/dpkg/lock-frontend
+        - /var/lib/dpkg/lock
+        - /var/lib/apt/lists/lock
+        - /var/cache/apt/archives/lock
+      ignore_errors: yes
 
       # ----- SWAP/Netfilter -----
 
@@ -44,6 +66,20 @@
           - containerd
         state: present
         update_cache: yes
+    
+    - name: Create containerd directory
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+      become: yes
+
+    - name: Create containerd empty config  
+      ansible.builtin.file:
+        path: /etc/containerd/config.toml
+        state: touch          
+        mode: '0644'          
+      become: yes
 
     - name: Generate default containerd config
       shell: containerd config default | tee /etc/containerd/config.toml
@@ -116,3 +152,14 @@
         name: kubectl
         state: present
         update_cache: yes
+
+    - name: Disable update
+      become: yes
+      ansible.builtin.dpkg_selections:
+        name: '{{ item }}'
+        selection: hold
+      with_items:
+        - kubeadm
+        - kubectl
+        - kubelet
+        - containerd

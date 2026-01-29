@@ -6,17 +6,17 @@
     - name: Copy private key from control node
       copy:
         src: ~/.ssh/id_rsa     
-        dest: /home/$(whoami)/.ssh/id_rsa     
-        owner: user
-        group: user
+        dest: /home/maxim/.ssh/id_rsa     
+        owner: maxim
+        group: maxim
         mode: '0600'
 
     - name: Copy private key from control node
       copy:
         src: ~/.ssh/id_rsa.pub
-        dest: /home/$(whoami)/.ssh/id_rsa.pub
-        owner: user
-        group: user
+        dest: /home/maxim/.ssh/id_rsa.pub
+        owner: maxim
+        group: maxim
         mode: '0600'
     
     - name: Create ansible directory
@@ -29,7 +29,13 @@
       ansible.builtin.copy:
         content: |
           [control-plane]
+          192.168.10.21
+          192.168.10.23
+          192.168.10.25
           [worker-plane]
+          192.168.10.31
+          192.168.10.33
+          192.168.10.35
         dest: ansible-k8s/hosts
 
     - name: Create ansible.cfg
@@ -37,14 +43,15 @@
         content: |
           [defaults]
           inventory = hosts
+          host_key_checking = False
         dest: ansible-k8s/ansible.cfg
 
     - name: Copy playbook to jump-on
       copy:
         src: ~/vms/playbooks/kubeadm-playbook.yaml
-        dest: /home/$(whoami)/ansible-k8s/kubeadm-playbook.yaml
-        owner: user
-        group: user
+        dest: /home/maxim/ansible-k8s/kubeadm-playbook.yaml
+        owner: maxim
+        group: maxim
         mode: '0644'
 
     - name: Run apt update
@@ -75,3 +82,31 @@
       ansible.builtin.shell: |
         mv ./kubectl /usr/local/bin/kubectl
         chmod +x /usr/local/bin/kubectl
+    # -------- Haproxy --------
+    - name: Install Haproxy
+      ansible.builtin.apt:
+        name: haproxy
+        update_cache: yes
+    
+    - name: Add Kubernetes frontend/backend to HAProxy
+      ansible.builtin.blockinfile:
+        path: /etc/haproxy/haproxy.cfg
+        block: |
+          frontend k8s-api
+              bind 0.0.0.0:6443
+              mode tcp
+              default_backend k8s-masters
+
+          backend k8s-masters
+              mode tcp
+              balance roundrobin
+              option tcp-check
+              server cp1-vm 192.168.10.21:6443 check backup
+              server cp2-vm 192.168.10.23:6443 check
+              server cp3-vm 192.168.10.25:6443 check backup
+    
+    - name: Restart haproxy
+      systemd:
+        name: haproxy
+        state: restarted  
+      become: yes
