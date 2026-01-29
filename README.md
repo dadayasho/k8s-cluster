@@ -82,13 +82,52 @@ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-3. Устанавливаем сетевой плагин `Flannel`
+3. Присоединям `worker ноды` к кластеру через kubeadm join.
+
+4. Устанавливаем сетевой плагин `Flannel`
 ```bash
 wget https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 sed -i 's/10.244.0.0\/16/192.168.0.0\/16/g' kube-flannel.yml
 kubectl apply -f kube-flannel.yml
 ```
-4. Присоединям `worker ноды` к кластеру через kubeadm join.
 
 ## Высокодоступный кластер
-TBC...
+
+
+При  построении высокодоступного кластера используем `Haproxy`, который позволяет балансировать трафик на мастер ноды с соотвесвтующим портом.
+
+Плейбук `ansible-playbook.yaml` установку `Haproxy` с добавлением конфига `/etc/haproxy/haproxy.conf`.
+
+Переходим к процессу инициализации кластера:
+```bash
+sudo kubeadm init \
+--cri-socket=unix:///var/run/containerd/containerd.sock \
+--pod-network-cidr=192.168.0.0/16 \
+--control-plane-endpoint=192.168.10.10:6443 \
+--upload-certs
+```
+
+Данной командой инициализируем кластер. 
+
+>[!TIP]
+>`--control-plane-endpoint=192.168.10.10:6443` - адресс прокси для мастер-нод
+>`--upload-certs` - загрузка сертификатов, для автоматического `join`
+
+После инициализации добавляем все ВМ, которые так же будут мастер-нодами и после добавляем рабочие-ноды.  
+
+Выполняем на всех мастер нодах:
+```bash
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+Далее на ВМ, с котрой инициализировали кластер поднимаем `CNI flanner plugin`.
+
+```bash
+wget https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+sed -i 's/10.244.0.0\/16/192.168.0.0\/16/g' kube-flannel.yml
+kubectl apply -f kube-flannel.yml
+```
+
+Чтобы использовать `jump-on` ВМ как точку входа в кластер -  следует содержимое `/etc/kubernetes/admin.conf` с ВМ на которой иницилизировали кластер переместить в `~/.kube/config` на `jump-on` машине.
