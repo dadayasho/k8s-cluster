@@ -110,3 +110,16 @@
         name: haproxy
         state: restarted  
       become: yes
+
+    # ------ Automatize vms settuping --------
+    
+    - name: Authotize in VM's
+      shell: sudo -u maxim ssh-keyscan -H {{ item }} >> /home/maxim/.ssh/known_hosts
+      loop: "{{ vm_ips }}"
+      become: yes
+      changed_when: false
+
+    - name: Apply playbook
+      ansible.builtin.shell: |
+        sudo -u maxim bash -c 'cd ~/ansible-k8s && ansible-playbook kubeadm-playbook.yaml'
+      become: yes
