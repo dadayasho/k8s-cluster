@@ -1,0 +1,7 @@
+---
+# handlers file for cluster-prepare
+
+  - name: Restart Haproxy
+    systemd:
+      name: haproxy
+      state: restarted

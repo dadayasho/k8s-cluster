@@ -59,12 +59,22 @@ ansible-playbook ansible-playbook.yaml
 ```
 Данный плейбук скопирует на ВМ плейбук для настройки нод, а именно `kubeadm-playbook.yaml` в рамках которого происходит подготовка ВМ к хосту кластера.
 
+
 # Настройка кластера
 
 Следует выполнить добавление IP-адрессов виртульных машин в `inventory-файл` в `/ansible-k8s/hosts` на `jump-on` машине.  
 Далее следует выполнить плейбук `/ansible/kubeadm-playbook.yaml`
 
-## Невысокодоступный кластер
+Либо воспользоваться мастер-плейбуком `playbooks/cluster-preparations.yaml` для автоматизированной настройки всего.
+
+```bash
+ansible-playbook -i inventory.yml playbooks/cluster-preparations.yaml --role-path ../cluster-prepare
+```
+В нем реализовано использование роли `cluster-prepare`.
+
+---
+
+## default кластер
 
 Так как кластер невысокодоступный, то следует в группе `control-plane` иметь одну ВМ.  
 1. Выполнить инициализацию кластера на `master ноде`.

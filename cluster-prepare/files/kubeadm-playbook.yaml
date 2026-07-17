@@ -1,0 +1,165 @@
+- name: Set Up Cluster
+  hosts: control-plane, worker-plane
+  become: yes
+
+  tasks:
+    # ----- Disable upgrades during set up -----
+    - name: Stop unattended-upgrades service
+      systemd:
+        name: unattended-upgrades
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+    
+    - name: Kill unattended-upgrades processes
+      shell: pkill -f unattended-upgr || true
+      ignore_errors: yes
+    
+    - name: Remove dpkg locks
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/dpkg/lock-frontend
+        - /var/lib/dpkg/lock
+        - /var/lib/apt/lists/lock
+        - /var/cache/apt/archives/lock
+      ignore_errors: yes
+
+      # ----- SWAP/Netfilter -----
+
+    - name: Disable swap (runtime)
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb | default(0) > 0
+
+    - name: Comment out swap in fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(.*\sswap\s+sw\s+.*)$'
+        replace: '# \1'
+
+    - name: Turn On br_netfilter
+      community.general.modprobe:
+        name: br_netfilter
+        state: present
+    
+    - name: Configure sysctl for Kubernetes
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-kubernetes-br.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward = 1
+        owner: root
+        group: root
+        mode: '0644'
+    
+    - name: Apply sysctl settings
+      ansible.builtin.command: sysctl --system
+      changed_when: false
+
+    # ----- containerd -----
+    
+    - name: Install containerd
+      ansible.builtin.apt:
+        name:
+          - containerd
+        state: present
+        update_cache: yes
+    
+    - name: Create containerd directory
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+      become: yes
+
+    - name: Create containerd empty config  
+      ansible.builtin.file:
+        path: /etc/containerd/config.toml
+        state: touch          
+        mode: '0644'          
+      become: yes
+
+    - name: Generate default containerd config
+      shell: containerd config default | tee /etc/containerd/config.toml
+      become: yes
+      
+    - name: Enable systemd cgroup driver
+      lineinfile:
+        path: /etc/containerd/config.toml
+        regexp: '^\s*SystemdCgroup\s*=\s*false'
+        line: '  SystemdCgroup = true'
+        backrefs: yes
+      become: yes
+     
+    - name: Reload systemd and restart containerd
+      systemd:
+        name: containerd
+        state: restarted  
+      become: yes
+
+    # ----- kubelet / kubeadm -----
+
+    - name: Ensure APT keyrings directory exists
+      become: yes
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Kubernetes apt key
+      become: yes
+      ansible.builtin.shell: |
+        curl -fsSL https://prod-cdn.packages.k8s.io/repositories/isv:/kubernetes:/core:/stable:/v1.30/deb/Release.key \
+        | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Add Kubernetes apt repository
+      become: yes
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        content: |
+          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://prod-cdn.packages.k8s.io/repositories/isv:/kubernetes:/core:/stable:/v1.30/deb/ /
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Update apt cache (with Kubernetes repo)
+      become: yes
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install kubelet
+      apt:
+        name: kubelet
+        state: present
+        update_cache: yes
+
+    - name: Install kubeadm
+      apt:
+        name: kubeadm
+        state: present
+
+    - name: Enable the kubelet service
+      service:
+        name: kubelet
+        enabled: yes
+  
+    - name: Install kubectl service
+      apt:
+        name: kubectl
+        state: present
+        update_cache: yes
+
+    - name: Disable update
+      become: yes
+      ansible.builtin.dpkg_selections:
+        name: '{{ item }}'
+        selection: hold
+      with_items:
+        - kubeadm
+        - kubectl
+        - kubelet
+        - containerd

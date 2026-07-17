@@ -1,0 +1,5 @@
+- name: Install Ansible on Host
+  hosts: vms
+  become: yes
+  roles:
+    - role: '../cluster-prepare'
